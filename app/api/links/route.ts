@@ -1,4 +1,4 @@
-import pool from '@/lib/db';
+import { supabase } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 
 // GET all links (public - only active, admin - all)
@@ -13,23 +13,28 @@ export async function GET(request: Request) {
       if (user) isAdmin = true;
     }
 
-    const query = isAdmin
-      ? 'SELECT * FROM links ORDER BY sort_order ASC'
-      : 'SELECT * FROM links WHERE is_active = 1 ORDER BY sort_order ASC';
+    let query = supabase.from('links').select('*, images:link_images(*)').order('sort_order', { ascending: true });
 
-    const [rows] = await pool.query(query);
-    const links = rows as Array<Record<string, unknown>>;
-
-    // Fetch images for each link
-    for (const link of links) {
-      const [images] = await pool.query(
-        'SELECT * FROM link_images WHERE link_id = ? ORDER BY sort_order ASC',
-        [link.id]
-      );
-      link.images = images;
+    if (!isAdmin) {
+      query = query.eq('is_active', 1);
     }
 
-    return Response.json(links);
+    const { data: links, error } = await query;
+
+    if (error) throw error;
+
+    // ensure images array exists and is ordered
+    const processedLinks = links?.map((link) => {
+      // sort images by sort_order
+      if (link.images && Array.isArray(link.images)) {
+        link.images.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+      } else {
+        link.images = [];
+      }
+      return link;
+    }) || [];
+
+    return Response.json(processedLinks);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return Response.json({ error: message }, { status: 500 });
@@ -60,14 +65,24 @@ export async function POST(request: Request) {
       return Response.json({ error: 'URL diperlukan untuk link' }, { status: 400 });
     }
 
-    const [result] = await pool.query(
-      'INSERT INTO links (type, title, url, description, is_active, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
-      [type || 'link', title, url || '', description || '', is_active ?? 1, sort_order ?? 0]
-    );
+    const { data, error } = await supabase
+      .from('links')
+      .insert([
+        {
+          type: type || 'link',
+          title,
+          url: url || '',
+          description: description || '',
+          is_active: is_active ?? 1,
+          sort_order: sort_order ?? 0
+        }
+      ])
+      .select('id')
+      .single();
 
-    const insertResult = result as { insertId: number };
+    if (error) throw error;
 
-    return Response.json({ success: true, id: insertResult.insertId });
+    return Response.json({ success: true, id: data.id });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return Response.json({ error: message }, { status: 500 });

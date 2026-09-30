@@ -1,4 +1,4 @@
-import pool from '@/lib/db';
+import { supabase } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 
 // GET single link
@@ -8,19 +8,22 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const [rows] = await pool.query('SELECT * FROM links WHERE id = ?', [id]);
-    const links = rows as Array<Record<string, unknown>>;
+    const { data: link, error } = await supabase
+      .from('links')
+      .select('*, images:link_images(*)')
+      .eq('id', id)
+      .single();
 
-    if (links.length === 0) {
-      return Response.json({ error: 'Link tidak ditemukan' }, { status: 404 });
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return Response.json({ error: 'Link tidak ditemukan' }, { status: 404 });
+      }
+      throw error;
     }
 
-    const link = links[0];
-    const [images] = await pool.query(
-      'SELECT * FROM link_images WHERE link_id = ? ORDER BY sort_order ASC',
-      [id]
-    );
-    link.images = images;
+    if (link.images && Array.isArray(link.images)) {
+      link.images.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    }
 
     return Response.json(link);
   } catch (error: unknown) {
@@ -49,10 +52,19 @@ export async function PUT(
     const { id } = await params;
     const { title, url, description, is_active, sort_order, type } = await request.json();
 
-    await pool.query(
-      'UPDATE links SET type = ?, title = ?, url = ?, description = ?, is_active = ?, sort_order = ? WHERE id = ?',
-      [type || 'link', title, url || '', description || '', is_active ?? 1, sort_order ?? 0, id]
-    );
+    const { error } = await supabase
+      .from('links')
+      .update({
+        type: type || 'link',
+        title,
+        url: url || '',
+        description: description || '',
+        is_active: is_active ?? 1,
+        sort_order: sort_order ?? 0
+      })
+      .eq('id', id);
+
+    if (error) throw error;
 
     return Response.json({ success: true });
   } catch (error: unknown) {
@@ -80,8 +92,12 @@ export async function DELETE(
 
     const { id } = await params;
 
-    // Images will be cascade deleted
-    await pool.query('DELETE FROM links WHERE id = ?', [id]);
+    const { error } = await supabase
+      .from('links')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
 
     return Response.json({ success: true });
   } catch (error: unknown) {

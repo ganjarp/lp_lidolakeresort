@@ -1,4 +1,4 @@
-import pool from '@/lib/db';
+import { supabase } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
@@ -24,8 +24,13 @@ export async function POST(
     const { id } = await params;
 
     // Verify link exists
-    const [links] = await pool.query('SELECT id FROM links WHERE id = ?', [id]);
-    if ((links as Array<Record<string, unknown>>).length === 0) {
+    const { data: link, error: linkError } = await supabase
+      .from('links')
+      .select('id')
+      .eq('id', id)
+      .single();
+
+    if (linkError || !link) {
       return Response.json({ error: 'Link tidak ditemukan' }, { status: 404 });
     }
 
@@ -42,6 +47,16 @@ export async function POST(
 
     const uploadedImages: Array<{ id: number; image_url: string; caption: string }> = [];
 
+    // Get current max sort_order
+    const { data: currentImages } = await supabase
+      .from('link_images')
+      .select('sort_order')
+      .eq('link_id', id)
+      .order('sort_order', { ascending: false })
+      .limit(1);
+    
+    let nextOrder = currentImages && currentImages.length > 0 ? (currentImages[0].sort_order || 0) + 1 : 1;
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const bytes = await file.arrayBuffer();
@@ -56,23 +71,26 @@ export async function POST(
       const imageUrl = `/uploads/links/${filename}`;
       const caption = captions[i] || '';
 
-      // Get current max sort_order for this link
-      const [maxOrder] = await pool.query(
-        'SELECT COALESCE(MAX(sort_order), 0) as max_order FROM link_images WHERE link_id = ?',
-        [id]
-      );
-      const nextOrder = ((maxOrder as Array<{ max_order: number }>)[0].max_order) + 1;
+      const { data: inserted, error: insertError } = await supabase
+        .from('link_images')
+        .insert([{
+          link_id: id,
+          image_url: imageUrl,
+          caption,
+          sort_order: nextOrder
+        }])
+        .select('id')
+        .single();
 
-      const [result] = await pool.query(
-        'INSERT INTO link_images (link_id, image_url, caption, sort_order) VALUES (?, ?, ?, ?)',
-        [id, imageUrl, caption, nextOrder]
-      );
+      if (insertError) throw insertError;
 
       uploadedImages.push({
-        id: (result as { insertId: number }).insertId,
+        id: inserted.id,
         image_url: imageUrl,
         caption,
       });
+
+      nextOrder++;
     }
 
     return Response.json({ success: true, images: uploadedImages });
@@ -89,12 +107,15 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const [rows] = await pool.query(
-      'SELECT * FROM link_images WHERE link_id = ? ORDER BY sort_order ASC',
-      [id]
-    );
+    const { data: images, error } = await supabase
+      .from('link_images')
+      .select('*')
+      .eq('link_id', id)
+      .order('sort_order', { ascending: true });
 
-    return Response.json(rows);
+    if (error) throw error;
+
+    return Response.json(images || []);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return Response.json({ error: message }, { status: 500 });

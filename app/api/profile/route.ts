@@ -1,13 +1,17 @@
-import pool from '@/lib/db';
+import { supabase } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 
 // GET profile (public)
 export async function GET() {
   try {
-    const [rows] = await pool.query('SELECT * FROM profile WHERE id = 1');
-    const profiles = rows as Array<Record<string, unknown>>;
+    const { data: profiles, error } = await supabase
+      .from('profile')
+      .select('*')
+      .eq('id', 1);
 
-    if (profiles.length === 0) {
+    if (error) throw error;
+
+    if (!profiles || profiles.length === 0) {
       return Response.json({
         display_name: 'Lido Lake Resort',
         bio: 'Welcome to Lido Lake Resort',
@@ -38,10 +42,12 @@ export async function PUT(request: Request) {
 
     const { display_name, bio, avatar_url } = await request.json();
 
-    await pool.query(
-      'UPDATE profile SET display_name = ?, bio = ?, avatar_url = ? WHERE id = 1',
-      [display_name, bio, avatar_url]
-    );
+    const { error } = await supabase
+      .from('profile')
+      .update({ display_name, bio, avatar_url })
+      .eq('id', 1);
+
+    if (error) throw error;
 
     return Response.json({ success: true });
   } catch (error: unknown) {

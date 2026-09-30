@@ -1,4 +1,4 @@
-import pool from '@/lib/db';
+import { supabase } from '@/lib/db';
 import { signToken } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 
@@ -10,10 +10,14 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Username dan password diperlukan' }, { status: 400 });
     }
 
-    const [rows] = await pool.query('SELECT * FROM admins WHERE username = ?', [username]);
-    const admins = rows as Array<{ id: number; username: string; password: string }>;
+    const { data: admins, error } = await supabase
+      .from('admins')
+      .select('*')
+      .eq('username', username);
 
-    if (admins.length === 0) {
+    if (error) throw error;
+
+    if (!admins || admins.length === 0) {
       return Response.json({ error: 'Username atau password salah' }, { status: 401 });
     }
 
