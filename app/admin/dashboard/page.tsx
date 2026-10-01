@@ -42,7 +42,7 @@ export default function AdminDashboard() {
   const [editingLink, setEditingLink] = useState<LinkItem | null>(null);
   const [expandedImages, setExpandedImages] = useState<number | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
-  const [uploadingImages, setUploadingImages] = useState<number | null>(null);
+  const [uploadingImages, setUploadingImages] = useState<{ linkId: number; progress: string } | null>(null);
 
   // Form state
   const [formTitle, setFormTitle] = useState('');
@@ -183,25 +183,36 @@ export default function AdminDashboard() {
     } catch { showToast('Gagal mengubah status', 'error'); }
   };
 
-  // ── Image Upload ──
+  // ── Image Upload (one file at a time to avoid Vercel body size limit) ──
   const handleImageUpload = async (linkId: number, files: FileList) => {
-    setUploadingImages(linkId);
-    const formData = new FormData();
-    for (let i = 0; i < files.length; i++) {
+    const totalFiles = files.length;
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < totalFiles; i++) {
+      setUploadingImages({ linkId, progress: `${i + 1}/${totalFiles}` });
+      const formData = new FormData();
       formData.append('images', files[i]);
       formData.append('captions', '');
+
+      try {
+        const res = await fetch(`/api/links/${linkId}/images`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${getToken()}` },
+          body: formData,
+        });
+        if (res.ok) { successCount++; }
+        else { failCount++; }
+      } catch { failCount++; }
     }
 
-    try {
-      const res = await fetch(`/api/links/${linkId}/images`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${getToken()}` },
-        body: formData,
-      });
-      if (res.ok) { showToast(`${files.length} gambar berhasil diupload`, 'success'); await fetchLinks(); }
-      else { showToast('Gagal mengupload gambar', 'error'); }
-    } catch { showToast('Terjadi kesalahan upload', 'error'); }
-    finally { setUploadingImages(null); }
+    setUploadingImages(null);
+    if (successCount > 0) {
+      showToast(`${successCount} gambar berhasil diupload${failCount > 0 ? `, ${failCount} gagal` : ''}`, 'success');
+      await fetchLinks();
+    } else {
+      showToast('Gagal mengupload gambar', 'error');
+    }
   };
 
   // ── Image Delete ──
@@ -423,10 +434,13 @@ export default function AdminDashboard() {
                               }
                             }}
                             className="btn btn-ghost p-2" title="Upload gambar"
-                            disabled={uploadingImages === link.id}>
-                            {uploadingImages === link.id ? (
-                              <span className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin"
-                                style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+                            disabled={uploadingImages?.linkId === link.id}>
+                            {uploadingImages?.linkId === link.id ? (
+                              <span className="flex items-center gap-1">
+                                <span className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin"
+                                  style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+                                <span className="text-xs" style={{ color: 'var(--accent)' }}>{uploadingImages.progress}</span>
+                              </span>
                             ) : (
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
