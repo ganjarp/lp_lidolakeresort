@@ -14,7 +14,7 @@ export async function GET() {
     if (!profiles || profiles.length === 0) {
       return Response.json({
         display_name: 'Lido Lake Resort',
-        bio: 'Welcome to Lido Lake Resort',
+        bio: 'Lido Lake Resort by MNC Hotel',
         avatar_url: '/uploads/avatar.png',
       });
     }
