@@ -21,7 +21,7 @@ export async function GET() {
         {
           id: 1,
           display_name: 'Lido Lake Resort',
-          bio: 'Selamat datang di Lido Lake Resort. Temukan keindahan alam danau Lido dan nikmati pengalaman liburan terbaik bersama kami.',
+          bio: 'Lido Lake Resort by MNC Hotel',
           avatar_url: '/uploads/avatar.png',
         },
         { onConflict: 'id' }
