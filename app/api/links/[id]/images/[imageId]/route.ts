@@ -1,7 +1,6 @@
 import { supabase } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
-import { unlink } from 'fs/promises';
-import path from 'path';
+import { deleteFile } from '@/lib/storage';
 
 // DELETE an image
 export async function DELETE(
@@ -22,7 +21,7 @@ export async function DELETE(
 
     const { imageId } = await params;
 
-    // Get image to delete file
+    // Get image to delete file from storage
     const { data: images, error: getError } = await supabase
       .from('link_images')
       .select('*')
@@ -31,12 +30,11 @@ export async function DELETE(
     if (getError) throw getError;
 
     if (images && images.length > 0) {
-      // Try to delete the physical file
+      // Delete file from Supabase Storage
       try {
-        const filepath = path.join(process.cwd(), 'public', images[0].image_url);
-        await unlink(filepath);
+        await deleteFile(images[0].image_url);
       } catch {
-        // File might not exist, continue
+        // File might not exist in storage, continue
       }
 
       const { error: delError } = await supabase

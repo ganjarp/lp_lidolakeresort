@@ -1,7 +1,5 @@
 import { verifyToken } from '@/lib/auth';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import { uploadFile } from '@/lib/storage';
 
 export async function POST(request: Request) {
   try {
@@ -23,19 +21,8 @@ export async function POST(request: Request) {
       return Response.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-    await mkdir(uploadDir, { recursive: true });
-
-    const ext = path.extname(file.name) || '.png';
-    const filename = `avatar-${uuidv4()}${ext}`;
-    const filepath = path.join(uploadDir, filename);
-
-    await writeFile(filepath, buffer);
-
-    const url = `/uploads/${filename}`;
+    // Upload to Supabase Storage instead of local filesystem
+    const url = await uploadFile(file, 'avatars');
 
     return Response.json({ success: true, url });
   } catch (error: unknown) {

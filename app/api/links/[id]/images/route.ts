@@ -1,8 +1,6 @@
 import { supabase } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import { uploadFile } from '@/lib/storage';
 
 // POST upload images for a link
 export async function POST(
@@ -42,9 +40,6 @@ export async function POST(
       return Response.json({ error: 'Tidak ada file yang diupload' }, { status: 400 });
     }
 
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'links');
-    await mkdir(uploadDir, { recursive: true });
-
     const uploadedImages: Array<{ id: number; image_url: string; caption: string }> = [];
 
     // Get current max sort_order
@@ -59,16 +54,9 @@ export async function POST(
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const bytes = await file.arrayBuffer();
-      const buffer = Buffer.from(bytes);
 
-      const ext = path.extname(file.name) || '.jpg';
-      const filename = `${uuidv4()}${ext}`;
-      const filepath = path.join(uploadDir, filename);
-
-      await writeFile(filepath, buffer);
-
-      const imageUrl = `/uploads/links/${filename}`;
+      // Upload to Supabase Storage instead of local filesystem
+      const imageUrl = await uploadFile(file, 'links');
       const caption = captions[i] || '';
 
       const { data: inserted, error: insertError } = await supabase
