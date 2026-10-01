@@ -22,7 +22,7 @@ export async function GET(
     }
 
     if (link.images && Array.isArray(link.images)) {
-      link.images.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+      link.images.sort((a: { sort_order?: number }, b: { sort_order?: number }) => (a.sort_order || 0) - (b.sort_order || 0));
     }
 
     return Response.json(link);

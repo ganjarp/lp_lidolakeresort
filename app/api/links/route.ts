@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     const processedLinks = links?.map((link) => {
       // sort images by sort_order
       if (link.images && Array.isArray(link.images)) {
-        link.images.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        link.images.sort((a: { sort_order?: number }, b: { sort_order?: number }) => (a.sort_order || 0) - (b.sort_order || 0));
       } else {
         link.images = [];
       }
